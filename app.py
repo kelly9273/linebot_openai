@@ -1,85 +1,94 @@
-from flask import Flask, request, abort
-
-from linebot import (
-    LineBotApi, WebhookHandler
-)
-from linebot.exceptions import (
-    InvalidSignatureError
-)
-from linebot.models import *
-
-#======python的函數庫==========
-import tempfile, os
-import datetime
-import openai
-import time
-import traceback
-#======python的函數庫==========
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
-# Channel Access Token
-line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
-# Channel Secret
-handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
-# OPENAI API Key初始化設定
-openai.api_key = os.getenv('OPENAI_API_KEY')
 
+plays_dict = {
+    "哈姆雷特 (Hamlet)": {
+        "劇作家": "威廉·莎士比亞 (William Shakespeare)",
+        "年份": 1600
+    },
+    "推銷員之死 (Death of a Salesman)": {
+        "劇作家": "亞瑟·米勒 (Arthur Miller)",
+        "年份": 1949
+    },
+    "櫻桃園 (The Cherry Orchard)": {
+        "劇作家": "安東·契訶夫 (Anton Chekhov)",
+        "年份": 1904
+    },
+    "等待戈多 (Waiting for Godot)": {
+        "劇作家": "塞繆爾·貝克特 (Samuel Beckett)",
+        "年份": 1953
+    },
+    "玩偶之家 (A Doll's House)": {
+        "劇作家": "亨里克·易卜生 (Henrik Ibsen)",
+        "年份": 1879
+    },
+    "女巫緋聞 (The Crucible)": {
+        "劇作家": "亞瑟·米勒 (Arthur Miller)",
+        "年份": 1953
+    },
+    "長日將盡夜未央 (Long Day's Journey Into Night)": {
+        "劇作家": "尤金·奧尼爾 (Eugene O'Neill)",
+        "年份": 1956
+    },
+    "認真的重要性 (The Importance of Being Earnest)": {
+        "劇作家": "奧斯卡·王爾德 (Oscar Wilde)",
+        "年份": 1895
+    },
+    "伊底帕斯王 (Oedipus Rex)": {
+        "劇作家": "索福克勒斯 (Sophocles)",
+        "年份": -429  # 公元前
+    },
+    "慾望街車 (A Streetcar Named Desire)": {
+        "劇作家": "田納西·威廉斯 (Tennessee Williams)",
+        "年份": 1947
+    },
+    "麥克白 (Macbeth)": {
+        "劇作家": "威廉·莎士比亞 (William Shakespeare)",
+        "年份": 1606
+    },
+    "羅密歐與茱麗葉 (Romeo and Juliet)": {
+        "劇作家": "威廉·莎士比亞 (William Shakespeare)",
+        "年份": 1595
+    },
+    "一九八四 (Nineteen Eighty-Four)": {
+        "劇作家": "喬治·奧威爾 (George Orwell)",
+        "年份": 1949
+    },
+    "雷雨 (Thunderstorm)": {
+        "劇作家": "曹禺 (Cao Yu)",
+        "年份": 1934
+    },
+    "北京人 (Peking Man)": {
+        "劇作家": "曹禺 (Cao Yu)",
+        "年份": 1941
+    },
+    "俄狄浦斯王 (Oedipus the King)": {
+        "劇作家": "索福克勒斯 (Sophocles)",
+        "年份": -429  # 公元前
+    },
+    "第十二夜 (Twelfth Night)": {
+        "劇作家": "威廉·莎士比亞 (William Shakespeare)",
+        "年份": 1602
+    },
+    "皆大歡喜 (As You Like It)": {
+        "劇作家": "威廉·莎士比亞 (William Shakespeare)",
+        "年份": 1599
+    }
+}
 
-def GPT_response(text):
-    # 接收回應
-    response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500)
-    print(response)
-    # 重組回應
-    answer = response['choices'][0]['text'].replace('。','')
-    return answer
+@app.route('/find_play', methods=['GET'])
+def find_play():
+    keyword = request.args.get('keyword', '').lower()
+    matching_plays = {}
+    for play, info in plays_dict.items():
+        if keyword in play.lower():
+            matching_plays[play] = info
+    
+    if matching_plays:
+        return jsonify(matching_plays)
+    else:
+        return jsonify({"message": "未找到匹配劇本。"})
 
-
-# 監聽所有來自 /callback 的 Post Request
-@app.route("/callback", methods=['POST'])
-def callback():
-    # get X-Line-Signature header value
-    signature = request.headers['X-Line-Signature']
-    # get request body as text
-    body = request.get_data(as_text=True)
-    app.logger.info("Request body: " + body)
-    # handle webhook body
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        abort(400)
-    return 'OK'
-
-
-# 處理訊息
-@handler.add(MessageEvent, message=TextMessage)
-def handle_message(event):
-    msg = event.message.text
-    try:
-        GPT_answer = GPT_response(msg)
-        print(GPT_answer)
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(GPT_answer))
-    except:
-        print(traceback.format_exc())
-        line_bot_api.reply_message(event.reply_token, TextSendMessage('你所使用的OPENAI API key額度可能已經超過，請於後台Log內確認錯誤訊息'))
-        
-
-@handler.add(PostbackEvent)
-def handle_message(event):
-    print(event.postback.data)
-
-
-@handler.add(MemberJoinedEvent)
-def welcome(event):
-    uid = event.joined.members[0].user_id
-    gid = event.source.group_id
-    profile = line_bot_api.get_group_member_profile(gid, uid)
-    name = profile.display_name
-    message = TextSendMessage(text=f'{name}歡迎加入')
-    line_bot_api.reply_message(event.reply_token, message)
-        
-        
-import os
-if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+if __name__ == '__main__':
+    app.run(debug=True)
