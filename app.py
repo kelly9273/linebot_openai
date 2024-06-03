@@ -9,8 +9,8 @@ app = Flask(__name__)
 LINE_CHANNEL_ACCESS_TOKEN = 'CHANNEL_ACCESS_TOKEN'
 LINE_CHANNEL_SECRET = 'CHANNEL_SECRET'
 
-line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(CHANNEL_SECRET)
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 plays_dict = {
     "哈姆雷特 (Hamlet)": {
@@ -96,7 +96,7 @@ def find_play_info_by_keyword(keyword):
     if matching_plays:
         return matching_plays
     else:
-        return "此劇本尚未列入書庫中。"
+        return "未找到匹配劇本。"
 
 @app.route("/callback", methods=['POST'])
 def callback():
