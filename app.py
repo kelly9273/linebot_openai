@@ -6,8 +6,8 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 app = Flask(__name__)
 
 # 替換成你的 Line Bot 的 Channel Access Token 和 Channel Secret
-LINE_CHANNEL_ACCESS_TOKEN = 'CHANNEL_ACCESS_TOKEN'
-LINE_CHANNEL_SECRET = 'CHANNEL_SECRET'
+LINE_CHANNEL_ACCESS_TOKEN = 'YOUR_CHANNEL_ACCESS_TOKEN'
+LINE_CHANNEL_SECRET = 'YOUR_CHANNEL_SECRET'
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
@@ -100,7 +100,7 @@ def find_play_info_by_keyword(keyword):
 
 @app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers['X-Line-Signature']
+    signature = request.headers.get('X-Line-Signature')
 
     body = request.get_data(as_text=True)
     app.logger.info("Request body: " + body)
