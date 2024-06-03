@@ -1,6 +1,16 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, abort
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
 app = Flask(__name__)
+
+# 替換成你的 Line Bot 的 Channel Access Token 和 Channel Secret
+LINE_CHANNEL_ACCESS_TOKEN = 'CHANNEL_ACCESS_TOKEN'
+LINE_CHANNEL_SECRET = 'CHANNEL_SECRET'
+
+line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(CHANNEL_SECRET)
 
 plays_dict = {
     "哈姆雷特 (Hamlet)": {
@@ -77,18 +87,47 @@ plays_dict = {
     }
 }
 
-@app.route('/find_play', methods=['GET'])
-def find_play():
-    keyword = request.args.get('keyword', '').lower()
+def find_play_info_by_keyword(keyword):
     matching_plays = {}
     for play, info in plays_dict.items():
-        if keyword in play.lower():
+        if keyword.lower() in play.lower():
             matching_plays[play] = info
     
     if matching_plays:
-        return jsonify(matching_plays)
+        return matching_plays
     else:
-        return jsonify({"message": "未找到匹配劇本。"})
+        return "此劇本尚未列入書庫中。"
 
-if __name__ == '__main__':
-    app.run(debug=True)
+@app.route("/callback", methods=['POST'])
+def callback():
+    signature = request.headers['X-Line-Signature']
+
+    body = request.get_data(as_text=True)
+    app.logger.info("Request body: " + body)
+
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+
+    return 'OK'
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    keyword = event.message.text
+    matching_plays = find_play_info_by_keyword(keyword)
+    
+    if isinstance(matching_plays, str):
+        response = matching_plays
+    else:
+        response = "符合關鍵字的劇本：\n"
+        for play, info in matching_plays.items():
+            response += f"劇本名稱：{play}，劇作家：{info['劇作家']}，年份：{info['年份']}\n"
+    
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=response)
+    )
+
+if __name__ == "__main__":
+    app.run()
