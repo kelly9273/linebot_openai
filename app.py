@@ -2,7 +2,7 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
-import tempfile, os
+import os
 import openai
 import traceback
 
@@ -47,13 +47,13 @@ def handle_message(event):
     if msg.lower() == "help":
         response = "您可以輸入任何問題來獲取回應。例如：\n1. 翻譯 你好\n2. 問答等"
     elif msg.lower().startswith("翻譯"):
-        text_to_translate = msg[3:].strip()
+        text_to_translate = msg[2:].strip()  # adjust index to skip "翻譯" and space
         if text_to_translate:
             try:
                 translation_en = translate_text(text_to_translate, "英文")
                 translation_ja = translate_text(text_to_translate, "日文")
                 response = f"翻譯結果：\n英文：{translation_en}\n日文：{translation_ja}"
-            except:
+            except Exception as e:
                 app.logger.error(traceback.format_exc())
                 response = "翻譯過程中出現錯誤，請稍後再試。"
         else:
@@ -62,7 +62,7 @@ def handle_message(event):
         try:
             GPT_answer = GPT_response(msg)
             response = GPT_answer
-        except:
+        except Exception as e:
             app.logger.error(traceback.format_exc())
             response = "處理您的請求時出現錯誤，請稍後再試。"
 
