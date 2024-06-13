@@ -4,29 +4,29 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
 import os
 import openai
-import traceback
 
 app = Flask(__name__)
 static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
-
 line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-def GPT_response(prompt):
-    response = openai.Completion.create(
-        model="gpt-3.5-turbo-instruct", 
-        prompt=prompt, 
-        temperature=0.5, 
-        max_tokens=500
-    )
-    answer = response['choices'][0]['text'].strip()
-    return answer
+def detect_language(text):
+    # Simple check for Chinese characters
+    for char in text:
+        if '\u4e00' <= char <= '\u9fff':
+            return 'zh'
+    return 'en'
 
-def translate_text(text, language):
-    prompt = f"請將以下文字翻譯成{language}：\n{text}"
-    translation = GPT_response(prompt)
-    return translation
+def translate_message(text, target_lang):
+    if target_lang == 'zh':
+        # Translate English to Chinese
+        response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500, stop=['\n'])
+    else:
+        # Translate Chinese to English
+        response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500, stop=['\n'])
+
+    return response['choices'][0]['text'].strip()
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -41,43 +41,18 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    msg = event.message.text.strip()
-    response = ""
-
-    if msg.lower() == "help":
-        response = "您可以輸入任何問題來獲取回應。例如：\n1. 翻譯 你好\n2. 問答等"
-    elif msg.lower().startswith("翻譯"):
-        text_to_translate = msg[2:].strip()  # adjust index to skip "翻譯" and space
-        if text_to_translate:
-            try:
-                translation_en = translate_text(text_to_translate, "英文")
-                translation_ja = translate_text(text_to_translate, "日文")
-                response = f"翻譯結果：\n英文：{translation_en}\n日文：{translation_ja}"
-            except Exception as e:
-                app.logger.error(traceback.format_exc())
-                response = "翻譯過程中出現錯誤，請稍後再試。"
-        else:
-            response = "請提供要翻譯的文字，例如：翻譯 你好"
-    else:
-        try:
-            GPT_answer = GPT_response(msg)
-            response = GPT_answer
-        except Exception as e:
-            app.logger.error(traceback.format_exc())
-            response = "處理您的請求時出現錯誤，請稍後再試。"
-
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response))
-
-@handler.add(MessageEvent, message=ImageMessage)
-def handle_image_message(event):
-    response = "您發送了一張圖片，謝謝！"
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response))
+    msg = event.message.text
+    try:
+        lang = detect_language(msg)
+        translated_msg = translate_message(msg, 'en' if lang == 'zh' else 'zh')
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=translated_msg))
+    except Exception as e:
+        print(traceback.format_exc())
+        line_bot_api.reply_message(event.reply_token, TextSendMessage('Translation failed. Please try again later.'))
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
-    data = event.postback.data
-    response = f"您觸發了 postback 事件，數據為：{data}"
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=response))
+    print(event.postback.data)
 
 @handler.add(MemberJoinedEvent)
 def welcome(event):
@@ -85,7 +60,7 @@ def welcome(event):
     gid = event.source.group_id
     profile = line_bot_api.get_group_member_profile(gid, uid)
     name = profile.display_name
-    message = TextSendMessage(text=f'{name} 歡迎加入')
+    message = TextSendMessage(text=f'{name}歡迎加入')
     line_bot_api.reply_message(event.reply_token, message)
 
 if __name__ == "__main__":
