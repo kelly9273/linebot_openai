@@ -3,9 +3,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
 import tempfile, os
-import datetime
 import openai
-import time
 import traceback
 
 app = Flask(__name__)
@@ -16,9 +14,19 @@ handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
 def GPT_response(text):
-    response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500)
+    response = openai.Completion.create(
+        model="gpt-3.5-turbo-instruct", 
+        prompt=text, 
+        temperature=0.5, 
+        max_tokens=500
+    )
     answer = response['choices'][0]['text'].strip()
     return answer
+
+def translate_text(text):
+    prompt = f"請將以下文字翻譯成英文：\n{text}"
+    translation = GPT_response(prompt)
+    return translation
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -37,11 +45,18 @@ def handle_message(event):
     response = ""
 
     if msg.lower() == "help":
-        response = "您可以輸入任何問題來獲取回應。例如：\n1. 查天氣\n2. 翻譯\n3. 問答等"
-    elif msg.lower().startswith("天氣"):
-        response = "請提供要查詢的地點，例如：天氣 台北"
+        response = "您可以輸入任何問題來獲取回應。例如：\n1. 翻譯 你好\n2. 問答等"
     elif msg.lower().startswith("翻譯"):
-        response = "請提供要翻譯的文字，例如：翻譯 你好"
+        text_to_translate = msg[3:].strip()
+        if text_to_translate:
+            try:
+                translation = translate_text(text_to_translate)
+                response = f"翻譯結果：\n{translation}"
+            except:
+                app.logger.error(traceback.format_exc())
+                response = "翻譯過程中出現錯誤，請稍後再試。"
+        else:
+            response = "請提供要翻譯的文字，例如：翻譯 你好"
     else:
         try:
             GPT_answer = GPT_response(msg)
