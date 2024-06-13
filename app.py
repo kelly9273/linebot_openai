@@ -13,18 +13,18 @@ line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
-def GPT_response(text):
+def GPT_response(prompt):
     response = openai.Completion.create(
         model="gpt-3.5-turbo-instruct", 
-        prompt=text, 
+        prompt=prompt, 
         temperature=0.5, 
         max_tokens=500
     )
     answer = response['choices'][0]['text'].strip()
     return answer
 
-def translate_text(text):
-    prompt = f"請將以下文字翻譯成英文：\n{text}"
+def translate_text(text, language):
+    prompt = f"請將以下文字翻譯成{language}：\n{text}"
     translation = GPT_response(prompt)
     return translation
 
@@ -50,8 +50,9 @@ def handle_message(event):
         text_to_translate = msg[3:].strip()
         if text_to_translate:
             try:
-                translation = translate_text(text_to_translate)
-                response = f"翻譯結果：\n{translation}"
+                translation_en = translate_text(text_to_translate, "英文")
+                translation_ja = translate_text(text_to_translate, "日文")
+                response = f"翻譯結果：\n英文：{translation_en}\n日文：{translation_ja}"
             except:
                 app.logger.error(traceback.format_exc())
                 response = "翻譯過程中出現錯誤，請稍後再試。"
