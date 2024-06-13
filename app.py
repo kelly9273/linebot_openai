@@ -113,6 +113,17 @@ def callback():
 
     return 'OK'
 
+@app.route("/webhook", methods=['POST'])
+def webhook():
+    # 驗證請求的內容是否正確
+    if request.method == "POST":
+        data = request.get_json()
+        print(data)  # 打印請求的數據
+        # 可以在此處添加你的處理邏輯
+        return "OK", 200
+    else:
+        return "Invalid request method", 400
+
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     keyword = event.message.text
