@@ -2,6 +2,7 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
+import logging
 
 app = Flask(__name__)
 
@@ -109,6 +110,7 @@ def callback():
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
+        app.logger.error("Invalid signature. Check your channel access token/channel secret.")
         abort(400)
 
     return 'OK'
@@ -118,10 +120,11 @@ def webhook():
     # 驗證請求的內容是否正確
     if request.method == "POST":
         data = request.get_json()
-        print(data)  # 打印請求的數據
+        app.logger.info("Webhook received data: " + str(data))  # 打印請求的數據
         # 可以在此處添加你的處理邏輯
         return "OK", 200
     else:
+        app.logger.error("Invalid request method.")
         return "Invalid request method", 400
 
 @handler.add(MessageEvent, message=TextMessage)
@@ -142,4 +145,5 @@ def handle_message(event):
     )
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     app.run()
