@@ -1,89 +1,85 @@
 from flask import Flask, request, abort
-from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
-import logging
+
+from linebot import (
+    LineBotApi, WebhookHandler
+)
+from linebot.exceptions import (
+    InvalidSignatureError
+)
+from linebot.models import *
+
+#======python的函數庫==========
+import tempfile, os
+import datetime
+import openai
+import time
+import traceback
+#======python的函數庫==========
 
 app = Flask(__name__)
+static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
+# Channel Access Token
+line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
+# Channel Secret
+handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
+# OPENAI API Key初始化設定
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
-# 替換成你的 Line Bot 的 Channel Access Token 和 Channel Secret
-LINE_CHANNEL_ACCESS_TOKEN = 'CHANNEL_ACCESS_TOKEN'
-LINE_CHANNEL_SECRET = 'CHANNEL_SECRET'
-OPEN_AI_API = 'OPEN_AI_API'
 
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
+def GPT_response(text):
+    # 接收回應
+    response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500)
+    print(response)
+    # 重組回應
+    answer = response['choices'][0]['text'].replace('。','')
+    return answer
 
-plays_dict = {
-    "哈姆雷特 (Hamlet)": {
-        "劇作家": "威廉·莎士比亞 (William Shakespeare)",
-        "年份": 1600
-    },
-    "雷雨 (Thunderstorm)": {
-        "劇作家": "曹禺 (Cao Yu)",
-        "年份": 1934
-    },
-    "北京人 (Peking Man)": {
-        "劇作家": "曹禺 (Cao Yu)",
-        "年份": 1941
-    },
-}
 
-def find_play_info_by_keyword(keyword):
-    matching_plays = {}
-    for play, info in plays_dict.items():
-        if keyword.lower() in play.lower():
-            matching_plays[play] = info
-    
-    if matching_plays:
-        return matching_plays
-    else:
-        return "此劇本尚未收錄於字典中。"
-
+# 監聽所有來自 /callback 的 Post Request
 @app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers.get('X-Line-Signature')
-
+    # get X-Line-Signature header value
+    signature = request.headers['X-Line-Signature']
+    # get request body as text
     body = request.get_data(as_text=True)
     app.logger.info("Request body: " + body)
-
+    # handle webhook body
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
-        app.logger.error("Invalid signature. Check your channel access token/channel secret.")
         abort(400)
-
     return 'OK'
 
-@app.route("/webhook", methods=['POST'])
-def webhook():
-    # 驗證請求的內容是否正確
-    if request.method == "POST":
-        data = request.get_json()
-        app.logger.info("Webhook received data: " + str(data))  # 打印請求的數據
-        # 可以在此處添加你的處理邏輯
-        return "OK", 200
-    else:
-        app.logger.error("Invalid request method.")
-        return "Invalid request method", 400
 
+# 處理訊息
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    keyword = event.message.text
-    matching_plays = find_play_info_by_keyword(keyword)
-    
-    if isinstance(matching_plays, str):
-        response = matching_plays
-    else:
-        response = "符合關鍵字的劇本：\n"
-        for play, info in matching_plays.items():
-            response += f"劇本名稱：{play}，劇作家：{info['劇作家']}，年份：{info['年份']}\n"
-    
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=response)
-    )
+    msg = event.message.text
+    try:
+        GPT_answer = GPT_response(msg)
+        print(GPT_answer)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(GPT_answer))
+    except:
+        print(traceback.format_exc())
+        line_bot_api.reply_message(event.reply_token, TextSendMessage('你所使用的OPENAI API key額度可能已經超過，請於後台Log內確認錯誤訊息'))
+        
 
+@handler.add(PostbackEvent)
+def handle_message(event):
+    print(event.postback.data)
+
+
+@handler.add(MemberJoinedEvent)
+def welcome(event):
+    uid = event.joined.members[0].user_id
+    gid = event.source.group_id
+    profile = line_bot_api.get_group_member_profile(gid, uid)
+    name = profile.display_name
+    message = TextSendMessage(text=f'{name}歡迎加入')
+    line_bot_api.reply_message(event.reply_token, message)
+        
+        
+import os
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    app.run()
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
