@@ -1,54 +1,47 @@
 from flask import Flask, request, abort
-from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
+from linebot import (
+    LineBotApi, WebhookHandler
+)
+from linebot.exceptions import (
+    InvalidSignatureError
+)
 from linebot.models import *
 import os
-import openai
+import traceback
 
 app = Flask(__name__)
 static_tmp_path = os.path.join(os.path.dirname(__file__), 'static', 'tmp')
+
+# Channel Access Token
 line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
+# Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
-openai.api_key = os.getenv('OPENAI_API_KEY')
 
-def detect_language(text):
-    # Simple check for Chinese characters
-    for char in text:
-        if '\u4e00' <= char <= '\u9fff':
-            return 'zh'
-    return 'en'
-
-def translate_message(text, target_lang):
-    if target_lang == 'zh':
-        # Translate English to Chinese
-        response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500, stop=['\n'])
-    else:
-        # Translate Chinese to English
-        response = openai.Completion.create(model="gpt-3.5-turbo-instruct", prompt=text, temperature=0.5, max_tokens=500, stop=['\n'])
-
-    return response['choices'][0]['text'].strip()
-
+# 監聽所有來自 /callback 的 Post Request
 @app.route("/callback", methods=['POST'])
 def callback():
+    # get X-Line-Signature header value
     signature = request.headers['X-Line-Signature']
+    # get request body as text
     body = request.get_data(as_text=True)
     app.logger.info("Request body: " + body)
+    # handle webhook body
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
     return 'OK'
 
+# 處理訊息
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     msg = event.message.text
     try:
-        lang = detect_language(msg)
-        translated_msg = translate_message(msg, 'en' if lang == 'zh' else 'zh')
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=translated_msg))
-    except Exception as e:
+        # 直接回覆用戶輸入的相同訊息
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(msg))
+    except:
         print(traceback.format_exc())
-        line_bot_api.reply_message(event.reply_token, TextSendMessage('Translation failed. Please try again later.'))
+        line_bot_api.reply_message(event.reply_token, TextSendMessage('發生錯誤，請稍後再試'))
 
 @handler.add(PostbackEvent)
 def handle_postback(event):
